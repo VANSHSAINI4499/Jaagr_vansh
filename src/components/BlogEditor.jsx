@@ -8,27 +8,26 @@ import axios from 'axios';
 import { ArrowLeft, Camera } from "lucide-react";
 
 const BlogEditor = () => {
-  const editorRef = useRef(null); 
+  const editorRef = useRef(null);
   const [editor, setEditor] = useState(null);
   const [lastSaved, setLastSaved] = useState("2 minutes ago");
   const [wordCount, setWordCount] = useState(0);
   const [charCount, setCharCount] = useState(0);
-  const [uploadedImage, setUploadedImage] = useState(null); 
-  const [imageUrl, setImageUrl] = useState(null); // State to store the image URL
-
+  const [uploadedImage, setUploadedImage] = useState(null);
+  const [imageUrl, setImageUrl] = useState(null);
+  const [selectedCategory, setSelectedCategory] = useState('AI');
+  const [tags, setTags] = useState(['Depression']);
+  const [newTag, setNewTag] = useState('');
+  
+  // Initialize Editor.js
   useEffect(() => {
-    // Initialize Editor.js only once
     if (!editor) {
       const editorInstance = new EditorJS({
-        holder: "editorjs", // ID of the container
+        holder: "editorjs",
+        minHeight: 0,
+        autofocus: true, // Add this to focus the editor on load
         tools: {
-          header: {
-            class: Header,
-            config: {
-              levels: [1, 2, 3, 4],
-              defaultLevel: 1,
-            },
-          },
+          header: Header,  // Simplified tool configurations
           list: {
             class: List,
             inlineToolbar: true,
@@ -37,7 +36,7 @@ const BlogEditor = () => {
             class: Paragraph,
             inlineToolbar: true,
           },
-          Image: {
+          image: {
             class: SimpleImage,
             config: {
               uploader: {
@@ -45,25 +44,30 @@ const BlogEditor = () => {
                   const formData = new FormData();
                   formData.append('file', file);
 
-                  const response = await axios.post(
-                    `http://localhost:5173/api/uploadImage/create`,
-                    formData, {
-                      headers: {
-                        "Content-Type": "multipart/form-data",
-                      },
-                      withCredentials: false,
-                    }
-                  );
+                  try {
+                    const response = await axios.post(
+                      'http://localhost:5173/api/uploadImage/create',
+                      formData,
+                      {
+                        headers: {
+                          "Content-Type": "multipart/form-data",
+                        },
+                        withCredentials: false,
+                      }
+                    );
 
-                  if (response.data.success === 1) {
-                    const { url } = response.data; // Assuming the response contains an "url" field
-                    setImageUrl(url); // Save the image URL
-                    return {
-                      success: 1,
-                      file: {
-                        url,
-                      },
-                    };
+                    if (response.data.success === 1) {
+                      return {
+                        success: 1,
+                        file: {
+                          url: response.data.url,
+                        },
+                      };
+                    }
+                    return { success: 0 };
+                  } catch (error) {
+                    console.error("Error uploading image:", error);
+                    return { success: 0 };
                   }
                 },
               },
@@ -71,6 +75,9 @@ const BlogEditor = () => {
           },
         },
         placeholder: "Start writing your blog post here...",
+        onReady: () => {
+          console.log('Editor.js is ready to work!');
+        },
         onChange: async () => {
           try {
             const content = await editorInstance.save();
@@ -79,19 +86,21 @@ const BlogEditor = () => {
             console.error("Error during content save:", error);
           }
         },
+        data: {
+          blocks: [] // Initialize with empty blocks array instead of empty object
+        }
       });
 
       setEditor(editorInstance);
     }
 
     return () => {
-      // Clean up Editor.js instance on unmount
       if (editor && typeof editor.destroy === "function") {
         editor.destroy();
         setEditor(null);
       }
     };
-  }, [editor]);
+  }, []);
 
   // Update word and character count
   const updateWordAndCharCount = (content) => {
@@ -101,8 +110,11 @@ const BlogEditor = () => {
     if (content && Array.isArray(content.blocks)) {
       content.blocks.forEach((block) => {
         if (block.data && typeof block.data.text === "string") {
-          words += block.data.text.trim().split(/\s+/).length;
-          chars += block.data.text.length;
+          const text = block.data.text.trim();
+          if (text) {
+            words += text.split(/\s+/).length;
+            chars += text.length;
+          }
         }
       });
     }
@@ -124,7 +136,7 @@ const BlogEditor = () => {
     }
   };
 
-  // Handle image upload
+  // Handle featured image upload
   const handleImageUpload = async (event) => {
     const file = event.target.files[0];
     if (file) {
@@ -133,8 +145,9 @@ const BlogEditor = () => {
 
       try {
         const response = await axios.post(
-          `http://localhost:5173/api/uploadImage/create`,
-          formData, {
+          'http://localhost:5173/api/uploadImage/create',
+          formData,
+          {
             headers: {
               "Content-Type": "multipart/form-data",
             },
@@ -142,13 +155,22 @@ const BlogEditor = () => {
         );
 
         if (response.data.success === 1) {
-          const { url } = response.data;
-          setUploadedImage(URL.createObjectURL(file)); // Local preview
-          setImageUrl(url); // Save the uploaded URL
+          setUploadedImage(URL.createObjectURL(file));
+          setImageUrl(response.data.url);
         }
       } catch (error) {
         console.error("Error uploading image:", error);
       }
+    }
+  };
+
+  // Handle adding new tags
+  const handleAddTag = (e) => {
+    if (e.key === 'Enter' && newTag.trim()) {
+      if (!tags.includes(newTag.trim())) {
+        setTags([...tags, newTag.trim()]);
+      }
+      setNewTag('');
     }
   };
 
@@ -187,13 +209,13 @@ const BlogEditor = () => {
         {/* Editor */}
         <div className="space-y-6">
           <div className="rounded-lg border bg-white p-6">
-            <div id="editorjs" ref={editorRef} className="min-h-[400px]" />
+            <div id="editorjs" className="min-h-[400px]" />
             <div className="mt-4 text-sm text-gray-500">
               Words: {wordCount} Characters: {charCount}
               <span className="float-right text-green-500">Changes saved</span>
             </div>
           </div>
-          {/* Image Preview Section */}
+          {/* Image Preview */}
           {uploadedImage && (
             <div className="rounded-lg border bg-white p-4">
               <h3 className="font-medium">Uploaded Image Preview</h3>
@@ -203,7 +225,9 @@ const BlogEditor = () => {
                 className="mt-4 rounded-lg"
               />
               {imageUrl && (
-                <p className="mt-2 text-sm text-gray-600">Uploaded URL: <a href={imageUrl} className="text-blue-500 underline" target="_blank" rel="noopener noreferrer">{imageUrl}</a></p>
+                <p className="mt-2 text-sm text-gray-600">
+                  Uploaded URL: <a href={imageUrl} className="text-blue-500 underline" target="_blank" rel="noopener noreferrer">{imageUrl}</a>
+                </p>
               )}
             </div>
           )}
@@ -218,13 +242,17 @@ const BlogEditor = () => {
 
           <div className="rounded-lg border bg-white p-4">
             <h3 className="mb-3 font-medium">Categories</h3>
-            <select className="w-full rounded-md border p-2">
+            <select 
+              className="w-full rounded-md border p-2"
+              value={selectedCategory}
+              onChange={(e) => setSelectedCategory(e.target.value)}
+            >
               <option>AI</option>
               <option>Computer Science</option>
               <option>Agents</option>
               <option>Currency</option>
               <option>Computer</option>
-              <option>Pollutin</option>
+              <option>Pollution</option>
               <option>Environment</option>
             </select>
           </div>
@@ -232,14 +260,19 @@ const BlogEditor = () => {
           <div className="rounded-lg border bg-white p-4">
             <h3 className="mb-3 font-medium">Tags</h3>
             <div className="mb-3 flex flex-wrap gap-2">
-              <span className="rounded-full bg-gray-100 px-3 py-1 text-sm">
-                Depression
-              </span>
+              {tags.map((tag, index) => (
+                <span key={index} className="rounded-full bg-gray-100 px-3 py-1 text-sm">
+                  {tag}
+                </span>
+              ))}
             </div>
             <input
               type="text"
               placeholder="Add a tag..."
               className="w-full rounded-md border p-2"
+              value={newTag}
+              onChange={(e) => setNewTag(e.target.value)}
+              onKeyPress={handleAddTag}
             />
           </div>
 
@@ -248,9 +281,9 @@ const BlogEditor = () => {
             <div className="flex items-center justify-center">
               <label
                 htmlFor="imageUpload"
-                className="flex cursor-pointer items-center rounded-lg border border-dashed px-4 py-8 text-center"
+                className="flex cursor-pointer flex-col items-center rounded-lg border border-dashed px-4 py-8 text-center"
               >
-                <Camera className="mx-auto mb-2 h-6 w-6" />
+                <Camera className="mb-2 h-6 w-6" />
                 <span className="text-sm text-gray-500">
                   Click to upload an image
                 </span>

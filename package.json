@@ -19,6 +19,7 @@
     "@editorjs/simple-image": "^1.6.0",
     "@nextui-org/react": "^2.6.10",
     "axios": "^1.7.9",
+    "date-fns": "^4.1.0",
     "framer-motion": "^11.15.0",
     "lucide-react": "^0.470.0",
     "react": "^18.3.1",
